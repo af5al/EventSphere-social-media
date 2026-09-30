@@ -11,23 +11,23 @@ export function Button({
   const content = children || text;
 
   const baseStyles =
-    "font-semibold flex items-center justify-center transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+    "font-medium flex items-center justify-center transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
   const sizeStyles = {
-    sm: "h-8 px-3 text-xs",
-    md: "h-8 md:h-10 px-4 text-xs sm:text-sm",
-    lg: "h-11 px-6 text-sm sm:text-base",
+    sm: "h-8 px-3 text-xs rounded-lg",
+    md: "h-10 px-4 text-xs sm:text-sm rounded-xl",
+    lg: "h-12 px-6 text-sm sm:text-base rounded-xl",
   };
 
   const variantStyles = {
     outline:
-      "myBorder myTextColor border-2 rounded-full hover:bg-[#0f1015] w-full",
+      "border border-indigo-500/40 text-indigo-300 hover:text-white hover:bg-indigo-600/20 hover:border-indigo-500/80 rounded-full w-full shadow-sm",
     solid:
-      "rounded-md bg-[#969696] p-2 text-white shadow-sm hover:bg-[#0f1015] focus-visible:outline-indigo-600",
+      "rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 shadow-sm hover:text-white",
     primary:
-      "rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm focus-visible:outline-indigo-600",
+      "rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white shadow-md shadow-indigo-500/20 focus-visible:outline-indigo-600 font-semibold",
     ghost:
-      "rounded-md text-gray-300 hover:text-white hover:bg-white/10",
+      "rounded-xl text-slate-300 hover:text-white hover:bg-white/10",
   };
 
   const combinedClasses = `${baseStyles} ${sizeStyles[size] || sizeStyles.md} ${

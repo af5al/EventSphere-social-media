@@ -1,21 +1,17 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import Button1 from "../../components/Button1";
-import Button2 from "../../components/Button2";
-import Myh1 from "../../components/Myh1";
 import AuthInput from "../../components/AuthInput";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { ServerVariables } from "../../utils/ServerVariables";
-import HomeIcon from "../../components/icons/HomeIcon";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { EventLoginThunk } from "../../Redux/slices/EventAuthSlice";
-import { FiEye, FiEyeOff } from "react-icons/fi";
+import { FiEye, FiEyeOff, FiArrowLeft, FiCalendar } from "react-icons/fi";
 
 const loginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Email is required"),
   password: Yup.string()
-    .min(6, "Password must be atleast 6 characters")
+    .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
 });
 
@@ -23,6 +19,7 @@ function EventLogin() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [showPswd, setShowPswd] = useState(false);
+  const { isLoading } = useSelector((state) => state.EventAuth);
 
   const formik = useFormik({
     initialValues: {
@@ -36,69 +33,114 @@ function EventLogin() {
   });
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-screen">
-      <div className="flex w-full flex-col max-w-[400px] items-center space-y-3">
-        <Myh1 title="Event Login" />
-        <div className="w-[270px] sm:w-full mt-8">
-          <div className="mt-2">
-            <form onSubmit={formik.handleSubmit} noValidate>
+    <div className="flex-1 flex flex-col items-center justify-center min-h-screen px-4 py-12 relative overflow-hidden">
+      {/* Background ambient glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="w-full max-w-md bg-[#111726]/90 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-purple-950/30 relative z-10 animate-fade-in">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <Link
+            to={ServerVariables.Landing}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-purple-400 transition-colors mb-6"
+          >
+            <FiArrowLeft className="text-sm" /> Back to Home
+          </Link>
+          <div className="inline-block p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 mb-3 shadow-inner">
+            <FiCalendar className="w-6 h-6" />
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Organizer Portal
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-2">
+            Sign in to manage your events, stories, and recruiting campaigns
+          </p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={formik.handleSubmit} noValidate className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Organizer Email
+            </label>
+            <AuthInput
+              name="email"
+              type="email"
+              placeholder="organizer@eventsphere.online"
+              value={formik.values.email}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+            />
+            {formik.errors.email && formik.touched.email && (
+              <p className="text-xs font-medium text-rose-400 mt-1">
+                {formik.errors.email}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Password
+              </label>
+              <button
+                type="button"
+                className="text-xs text-purple-400 hover:text-purple-300 transition-colors cursor-pointer"
+                onClick={() => navigate(ServerVariables.eventEmailVerification)}
+              >
+                Forgot password?
+              </button>
+            </div>
+            <div className="relative">
               <AuthInput
-                name="email"
-                type="email"
-                placeholder="Email"
-                value={formik.values.email}
+                name="password"
+                type={showPswd ? "text" : "password"}
+                placeholder="••••••••"
+                value={formik.values.password}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
               />
-              {formik.errors.email && formik.touched.email && (
-                <p className="text-sm font-bold text-red-600">
-                  {formik.errors.email}
-                </p>
-              )}
-              <div className="relative">
-                <AuthInput
-                  name="password"
-                  type={showPswd === true ? "text" : "password"}
-                  placeholder="Password"
-                  value={formik.values.password}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 mx-2"
-                  onClick={() => setShowPswd(!showPswd)}
-                >
-                  {showPswd ? (
-                    <FiEye color="white" />
-                  ) : (
-                    <FiEyeOff color="white" />
-                  )}
-                </button>
-                <p className="myPara flex justify-end text-xs cursor-pointer mr-2" onClick={()=> navigate(ServerVariables.eventEmailVerification)}>Forget password ?</p>
-              </div>
-              {formik.errors.password && formik.touched.password && (
-                <p className="text-sm font-bold text-red-500">
-                  {formik.errors.password}
-                </p>
-              )}
-
-              <Button1 text="Login" style={{ marginTop: 8 }} type="submit" />
-              <Link
-                to={ServerVariables.eventRegister}
-                className="myBorder myTextColor text-[10px] sm:text-sm  h-8 md:h-10  border-2 mt-2  w-full rounded-full px-4 font-semibold flex items-center justify-center"
+              <button
+                type="button"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                onClick={() => setShowPswd(!showPswd)}
               >
-                Register Event
-              </Link>
-            </form>
-            <Link
-              className="h-12 w-full px-4 py-8 text-[#E0CDB6] flex items-center justify-center"
-              to={ServerVariables.Landing}
-            >
-              <Button2 text={<HomeIcon />} />
-            </Link>
+                {showPswd ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
+              </button>
+            </div>
+            {formik.errors.password && formik.touched.password && (
+              <p className="text-xs font-medium text-rose-400 mt-1">
+                {formik.errors.password}
+              </p>
+            )}
           </div>
-        </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full mt-2 py-3.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50"
+          >
+            {isLoading ? "Signing in..." : "Organizer Sign In"}
+          </button>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-800"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-[#111726] px-3 text-slate-400 font-medium">
+                Want to host events?
+              </span>
+            </div>
+          </div>
+
+          <Link
+            to={ServerVariables.eventRegister}
+            className="w-full py-3 px-4 rounded-xl font-medium text-sm text-slate-200 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 transition-all duration-200 flex items-center justify-center text-center shadow-sm"
+          >
+            Register as Organizer
+          </Link>
+        </form>
       </div>
     </div>
   );
