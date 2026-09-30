@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import React from "react";
+import { Routes, Route } from "react-router-dom";
 import { ServerVariables } from "./ServerVariables";
 import { Toaster } from "react-hot-toast";
 

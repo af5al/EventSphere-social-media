@@ -1,8 +1,8 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { apiEndPoints } from "../../utils/api";
-import { userRequest } from "../../Helper/instance";
 import { toast } from "react-hot-toast";
 import { hideLoading, showLoading } from "./LoadingSlice";
+import { userRequest } from "../../Helper/instance";
 
 
 const initialState = {
@@ -57,7 +57,7 @@ export const loginThunk = (data) => async (dispatch) => {
     dispatch(showLoading());
     const res = await userRequest({
       url: apiEndPoints.postLogin,
-      method: "post",
+      method: "POST",
       data: data,
     });
     dispatch(hideLoading());
