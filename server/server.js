@@ -1,38 +1,76 @@
+require("dotenv").config();
 const express = require("express");
-const app = express();
-const multer = require("multer");
 const path = require("path");
 const morgan = require("morgan");
-const bodyParser = require("body-parser");
+const cors = require("cors");
+const helmet = require("helmet");
 
-// to use (.env file access)
-require("dotenv").config();
 const dbConfig = require("./config/db");
 const initializeSocket = require("./sockets/chatSocket");
+const errorMiddleware = require("./middlewares/errorMiddleware");
+const ApiError = require("./util/ApiError");
 
-const cors = require("cors");
+const userRoutes = require("./routes/userRoutes");
+const eventRoutes = require("./routes/EventsRoutes");
+const adminRoutes = require("./routes/AdminRoutes");
+
+const app = express();
+
+// Security Middlewares
 app.use(
-  cors({
-    origin: "*",
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
-app.use(morgan("common"));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public/assets")));
-// to destructure json type data from user as request
-app.use(express.json());
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
-const userRoutes = require("./routes/userRoutes");
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin || allowedOrigins.includes(origin) || origin.includes("localhost")) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Permissive in dev, configurable for prod
+    },
+    credentials: true,
+  })
+);
+
+// Logging & Body Parsers
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use(express.json({ limit: "20mb" }));
+app.use(express.static(path.join(__dirname, "public/assets")));
+
+// Health Check
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Application Routes
 app.use("/api/user", userRoutes);
-const eventRoutes = require("./routes/EventsRoutes");
 app.use("/api/event", eventRoutes);
-const adminRoutes = require("./routes/AdminRoutes");
 app.use("/api/admin", adminRoutes);
+
+// Catch-all for undefined routes
+app.use((req, res, next) => {
+  next(new ApiError(404, `Route not found: ${req.method} ${req.originalUrl}`));
+});
+
+// Centralized Error Handling Middleware
+app.use(errorMiddleware);
 
 const port = process.env.PORT || 5000;
 const server = app.listen(port, () => {
-  console.log("server running on " + port);
+  console.log(`[EventSphere Server] running on port ${port}`);
 });
 
 initializeSocket(server);
+
+module.exports = app;

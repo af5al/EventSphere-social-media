@@ -1,42 +1,54 @@
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
-const user = axios.create({ baseURL: API_BASE_URL });
 
-export const userRequest = ({ ...options }) => {
-  //the Authorization header
-  user.defaults.headers.common.Authorization = JSON.parse(
-    localStorage.getItem("UserToken")
-  );
-  const onSuccess = (response) => response;
-  const onError = (error) => {
-    console.log("axios interceptor", error);
-    return error;
-  };
-  return user(options).then(onSuccess).catch(onError);
+const safeGetToken = (storageKey) => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    return raw.startsWith("{") || raw.startsWith('"') || raw.startsWith("[")
+      ? JSON.parse(raw)
+      : raw;
+  } catch (e) {
+    return localStorage.getItem(storageKey);
+  }
 };
 
-export const eventRequest = ({ ...options }) => {
-  user.defaults.headers.common.Authorization = JSON.parse(
-    localStorage.getItem("eventToken")
+const createApiClient = (tokenKey) => {
+  const instance = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 30000,
+  });
+
+  instance.interceptors.request.use(
+    (config) => {
+      const token = safeGetToken(tokenKey);
+      if (token) {
+        config.headers.Authorization = token.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
   );
 
-  const onSuccess = (response) => response;
-  const onError = (error) => {
-    console.log("axios interceptor", error);
-    return error;
-  };
-  return user(options).then(onSuccess).catch(onError);
-};
-
-export const adminRequest = ({ ...options }) => {
-  user.defaults.headers.common.Authorization = JSON.parse(
-    localStorage.getItem("adminToken")
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // If server responded with 4xx or 5xx, return the response so components
+      // checking res.data.error receive the server's payload seamlessly
+      if (error.response) {
+        return error.response;
+      }
+      return Promise.reject(error);
+    }
   );
 
-  const onSuccess = (response) => response;
-  const onError = (error) => {
-    console.log("axios interceptor", error);
-    return error;
-  };
-  return user(options).then(onSuccess).catch(onError);
+  return (options) => instance(options);
 };
+
+export const userRequest = createApiClient("UserToken");
+export const eventRequest = createApiClient("eventToken");
+export const adminRequest = createApiClient("adminToken");
+
+export default createApiClient("UserToken");

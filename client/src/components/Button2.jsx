@@ -1,11 +1,12 @@
-import React from 'react'
+import React from "react";
+import Button from "./ui/Button";
 
-function Button2({text,...props}) {
+function Button2({ text, children, ...props }) {
   return (
-    <button {...props} type='button' className="text-[0.5rem] sm:text-sm rounded-md bg-[#969696] p-2 font-semibold text-white shadow-sm hover:bg-[#0f1015] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-        {text}
-    </button>
-  )
+    <Button variant="solid" text={text} type="button" {...props}>
+      {children}
+    </Button>
+  );
 }
 
-export default Button2
+export default Button2;

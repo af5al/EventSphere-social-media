@@ -1,9 +1,19 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { apiEndPoints } from "../../utils/api";
 import { adminRequest } from "../../Helper/instance";
 import toast from "react-hot-toast";
-import { hideLoading, showLoading } from "./LoadingSlice";
 
+const safeGetStorage = (key, fallback = null) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) return fallback;
+    return item.startsWith("{") || item.startsWith("[") || item.startsWith('"')
+      ? JSON.parse(item)
+      : item;
+  } catch (err) {
+    return fallback;
+  }
+};
 
 const initialState = {
   isLoading: false,
@@ -11,12 +21,38 @@ const initialState = {
   isSuccess: false,
   errorMsg: "",
   message: "",
-  admin: JSON.parse(localStorage.getItem("adminInfo")) || {},
-  token: JSON.parse(localStorage.getItem("adminToken")) || null,
+  admin: safeGetStorage("adminInfo", {}),
+  token: safeGetStorage("adminToken", null),
 };
 
+export const AdminLoginThunk = createAsyncThunk(
+  "adminAuth/login",
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const res = await adminRequest({
+        url: apiEndPoints.postLoginAdmin,
+        method: "POST",
+        data: credentials,
+      });
+
+      if (res.data?.success) {
+        toast.success(res.data.success);
+        return res.data;
+      } else {
+        const errorMsg = res.data?.error || res.data?.message || "Admin login failed";
+        toast.error(errorMsg);
+        return rejectWithValue(errorMsg);
+      }
+    } catch (error) {
+      const msg = error.response?.data?.message || "Request failed";
+      toast.error(msg);
+      return rejectWithValue(msg);
+    }
+  }
+);
+
 export const AdminAuthSlice = createSlice({
-  name: "Admin Auth",
+  name: "AdminAuth",
   initialState,
   reducers: {
     loginPending: (state) => {
@@ -27,51 +63,65 @@ export const AdminAuthSlice = createSlice({
       state.isSuccess = true;
       state.isError = false;
       state.admin = action.payload.admin;
+      state.token = action.payload.token;
+      state.message = action.payload.success || "Login successful";
       localStorage.setItem("adminInfo", JSON.stringify(action.payload.admin));
       localStorage.setItem("adminToken", JSON.stringify(action.payload.token));
-      state.token = action.payload.token;
-      state.message = action.payload.success;
     },
     loginReject: (state, action) => {
       state.isLoading = false;
       state.isError = true;
       state.isSuccess = false;
-      state.errorMsg = action.payload.error;
+      state.errorMsg = action.payload?.error || action.payload || "Login failed";
     },
     logout: (state) => {
       localStorage.removeItem("adminInfo");
       localStorage.removeItem("adminToken");
       state.token = null;
-      state.user = {};
+      state.admin = {};
+      state.isSuccess = false;
+      state.isError = false;
+      state.errorMsg = "";
     },
+    clearAdminAuthStatus: (state) => {
+      state.isLoading = false;
+      state.isError = false;
+      state.isSuccess = false;
+      state.errorMsg = "";
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(AdminLoginThunk.pending, (state) => {
+        state.isLoading = true;
+        state.isError = false;
+        state.errorMsg = "";
+      })
+      .addCase(AdminLoginThunk.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.isError = false;
+        state.admin = action.payload.admin;
+        state.token = action.payload.token;
+        state.message = action.payload.success || "Login successful";
+        localStorage.setItem("adminInfo", JSON.stringify(action.payload.admin));
+        localStorage.setItem("adminToken", JSON.stringify(action.payload.token));
+      })
+      .addCase(AdminLoginThunk.rejected, (state, action) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.isSuccess = false;
+        state.errorMsg = action.payload || "Authentication failed";
+      });
   },
 });
 
-export const AdminLoginThunk = (data) => async (dispatch) => {
-  try {
-    dispatch(loginPending());
-    dispatch(showLoading())
-    const res = await adminRequest({
-      url: apiEndPoints.postLoginAdmin,
-      method: "post",
-      data: data,
-    });
-    dispatch(hideLoading())
-    if(res.data.success){
-      toast.success(res.data.success)
-      dispatch(loginSuccess(res.data));
-    }else{
-      toast.error(res.data.error)
-      dispatch(loginReject(res.data))
-    }
-    
-  } catch (error) {
-     dispatch(hideLoading())
-     toast.error('request failed')
-     dispatch(loginReject({ error: 'No response received from the server.' }));
-  }
-};
+export const {
+  loginPending,
+  loginSuccess,
+  loginReject,
+  logout,
+  clearAdminAuthStatus,
+} = AdminAuthSlice.actions;
 
-
-export const { loginPending, loginSuccess, loginReject, logout } = AdminAuthSlice.actions;
 export default AdminAuthSlice.reducer;

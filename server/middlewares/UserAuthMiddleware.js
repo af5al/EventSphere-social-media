@@ -1,26 +1,45 @@
-//   to verify token
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const ApiError = require("../util/ApiError");
 
-// this middleware should correctly verify JWTs in incoming requests and extract the user's ID for further processing
 module.exports = async (req, res, next) => {
   try {
-    const token = req.headers["authorization"] 
-    console.log(token, process.env.JWT_SECRET)
-    jwt.verify(token, process.env.JWT_SECRET, (err, decode) => {
+    let token = req.headers["authorization"] || req.headers["Authorization"];
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No authorization token provided",
+        error: "Auth failed",
+      });
+    }
+
+    if (token.startsWith("Bearer ")) {
+      token = token.slice(7).trim();
+    }
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
+      token = token.slice(1, -1);
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
-        return res.status(401).send({
-          message: "Auth failed",
+        return res.status(401).json({
           success: false,
+          message: "Invalid or expired token",
+          error: "Auth failed",
         });
-      } else {
-        req.userId = decode.id;
-        next();
       }
+      req.userId = decoded.id;
+      req.user = decoded.user;
+      next();
     });
   } catch (error) {
-    return res
-      .status(500)
-      .send({ message: "Internal server error", success: false });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error during authentication",
+      error: error.message,
+    });
   }
 };

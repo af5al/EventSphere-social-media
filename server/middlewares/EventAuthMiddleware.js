@@ -1,26 +1,43 @@
-//   to verify token
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const Event = require("../models/EventModel");
 
-// this middleware should correctly verify JWTs in incoming requests and extract the user's ID for further processing
 module.exports = async (req, res, next) => {
   try {
-    const token = req.headers["authorization"];
-    console.log(token, process.env.JWT_SECRET);
-    jwt.verify(token, process.env.JWT_SECRET, async (err, decode) => {
-      if (err) {
-        return res.status(401).send({
-          message: "Auth failed",
-          success: false,
-        });
-      } else {
-        req.eventId = decode.id;
+    let token = req.headers["authorization"] || req.headers["Authorization"];
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No authorization token provided",
+        error: "Auth failed",
+      });
+    }
 
-        // check and clear expired plan of event
+    if (token.startsWith("Bearer ")) {
+      token = token.slice(7).trim();
+    }
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
+      token = token.slice(1, -1);
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
+      if (err) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid or expired token",
+          error: "Auth failed",
+        });
+      }
+
+      req.eventId = decoded.id;
+
+      // Check and clear expired plan of event
+      try {
         const event = await Event.findById(req.eventId);
         const currentDate = new Date();
-        console.log("selected", event?.selectedPlan);
         if (event?.selectedPlan?.transactionId) {
           if (event?.selectedPlan?.expiry < currentDate) {
             await Event.updateOne(
@@ -29,17 +46,17 @@ module.exports = async (req, res, next) => {
             );
           }
         }
-
-
-
-        next();
+      } catch (dbErr) {
+        console.error("Plan expiry check error:", dbErr.message);
       }
+
+      next();
     });
   } catch (error) {
-    return res
-      .status(500)
-      .send({ message: "Internal server error", success: false });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error during authentication",
+      error: error.message,
+    });
   }
 };
-
-

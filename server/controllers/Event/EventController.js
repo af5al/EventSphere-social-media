@@ -1,681 +1,178 @@
-const Event = require("../../models/EventModel");
-const EventPost = require("../../models/EventPostModel");
-const Comment = require("../../models/CommentModel");
-const Story = require("../../models/StoryModel");
-const Notification = require("../../models/NotificationModel");
-const Chats = require("../../models/ChatsModel");
-const ChatConnection = require("../../models/ChatConnection");
-const JobPost = require("../../models/JobPostModel");
+const authService = require("../../services/auth.service");
+const eventService = require("../../services/event.service");
+const jobService = require("../../services/job.service");
 const CatchAsync = require("../../util/CatchAsync");
-const bcrypt = require("bcrypt");
-const randomString = require("randomstring");
-const OtpMailer = require("../../util/OtpMailer");
-const jwt = require("jsonwebtoken");
-const jobPostModel = require("../../models/JobPostModel");
 
-//hashing  password
-const securePassword = async (password) => {
-  const passwordHash = await bcrypt.hash(password, 10);
-  return passwordHash;
-};
+// ==================== AUTH ====================
 
 exports.registerEvent = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  const isEventExists = await Event.findOne({ email: req.body.email });
-  if (isEventExists) {
-    return res.json({ error: "Event already exists" });
-  } else {
-    const secPassword = await securePassword(req.body.password);
-    const newOtp = randomString.generate({
-      length: 4,
-      charset: "numeric",
-    });
-    const event = new Event({
-      title: req.body.eventName,
-      email: req.body.email,
-      ownerName: req.body.Ownername,
-      place: req.body.place,
-      phone: req.body.phone,
-      altPhone: req.body.altPhone,
-      services: req.body.services,
-      officeAddress: req.body.officeAddress,
-      password: secPassword,
-      otp: { code: newOtp, generatedAt: Date.now() },
-    });
-    const eventData = await event.save();
-
-    if (eventData) {
-      const options = {
-        from: process.env.EMAIL,
-        to: req.body.email,
-        subject: "EventSphere verification otp",
-        html: `<center> <h2>Verify Your Email </h2> <br> <h5>OTP :${newOtp} </h5><br><p>This otp is only valid for 1 minutes only</p></center>`,
-      };
-      await OtpMailer.sendMail(options)
-        .then((res) => console.log("otp sended"))
-        .catch((err) => console.log(err.message));
-      return res.status(200).json({ success: "ok", email: req.body.email });
-    } else {
-      res.status(404).json({ error: "user registration failed" });
-    }
-  }
+  const result = await authService.registerEvent(req.body);
+  res.status(201).json({ success: "ok", email: result.email });
 });
 
 exports.verifyEventOtp = CatchAsync(async (req, res) => {
-  // return console.log(req?.body);
-  const { otp, email } = req.body;
-  const event = await Event.findOne({ email: email });
-  const generatedAt = new Date(event.otp.generatedAt).getTime();
-  if (Date.now() - generatedAt <= 60 * 1000) {
-    if (otp === event.otp.code) {
-      event.isVerified = true;
-      event.otp.code = "";
-      await event.save();
-      return res.status(200).json({ success: "event registered successfully" });
-    } else {
-      return res.json({ error: "otp is invalid" });
-    }
-  } else {
-    return res.json({ error: "otp expired" });
-  }
+  const result = await authService.verifyEventOtp(req.body);
+  res.status(200).json({ success: result.message });
 });
 
 exports.ResendOtpEvent = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  if (!req.body.email) {
-    return console.log("email missing");
-  }
-  const event = await Event.findOne({ email: req.body.email });
-  const newOtp = randomString.generate({
-    length: 4,
-    charset: "numeric",
-  });
-  const options = {
-    from: process.env.EMAIL,
-    to: req.body.email,
-    subject: "EventSphere verification otp for Event",
-    html: `<center> <h2>Verify Your Email </h2> <br> <h5>OTP :${newOtp} </h5><br><p>This otp is only valid for 1 minutes only</p></center>`,
-  };
-  await OtpMailer.sendMail(options)
-    .then((res) => console.log("otp sended"))
-    .catch((err) => console.log(err.message));
-
-  event.otp.code = newOtp;
-  event.otp.generatedAt = Date.now();
-  await event.save();
-  return res
-    .status(200)
-    .json({ success: "Otp Resended", email: req.body.email });
+  const result = await authService.resendEventOtp(req.body);
+  res.status(200).json({ success: "Otp Resended", email: result.email });
 });
 
 exports.verifyEventLogin = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  const event = await Event.findOne({ email: req.body.email });
-  if (!event) {
-    return res.json({ error: "event not found" });
-  }
-  const isMatch = await bcrypt.compare(req.body.password, event.password);
-  if (!isMatch) {
-    return res.status(200).json({ error: "password is not matching" });
-  }
-
-  if (event.isBlocked) {
-    return res.status(200).json({ error: "Sorry, event is blocked by admin" });
-  }
-
-  if (!event.isVerified) {
-    await Event.findOneAndDelete({ email: req.body.email });
-    return res
-      .status(200)
-      .json({ error: "Event Account Not Verified SignUp Again" });
-  }
-
-  const token = jwt.sign({ id: event._id }, process.env.JWT_SECRET, {
-    expiresIn: "1d",
-  });
-  event.password = "";
+  const { token, event } = await authService.loginEvent(req.body);
   res.status(200).json({ success: "Login successful", token, event });
 });
 
 exports.verifyEvent = CatchAsync(async (req, res) => {
-  const email = req.body?.email;
-  const event = await Event.findOne({ email });
-  if (event) {
-    const newOtp = randomString.generate({
-      length: 4,
-      charset: "numeric",
-    });
-    const options = {
-      from: process.env.EMAIL,
-      to: email,
-      subject: "EventSphere verification otp",
-      html: `<center> <h2>Verify Your Email </h2> <br> <h5>OTP :${newOtp} </h5><br><p>This otp is only valid for 1 minutes only</p></center>`,
-    };
-    await OtpMailer.sendMail(options)
-      .then((res) => console.log("otp sended"))
-      .catch((err) => console.log(err.message));
-    event.otp.code = newOtp;
-    event.otp.generatedAt = Date.now();
-    await event.save();
-    return res.status(200).json({ success: "ok", email });
-  } else {
-    res.json({ error: "user does not exist, enter valid email" });
-  }
+  const result = await authService.verifyEventEmail(req.body);
+  res.status(200).json({ success: "ok", email: result.email });
 });
 
 exports.resetEventPassword = CatchAsync(async (req, res) => {
-  console.log("event side");
-  const email = req.body?.email;
-  const secPassword = await securePassword(req?.body?.password);
-  const event = await Event.findOne({ email });
-  if (event) {
-    event.password = secPassword;
-    await event.save();
-    return res.status(200).json({ success: "password changed" });
-  } else {
-    res.json({ error: "user credentials missing, try again" });
-  }
+  const result = await authService.resetEventPassword(req.body);
+  res.status(200).json({ success: result.message });
 });
 
+// ==================== PROFILE & POSTS ====================
+
 exports.updateEvent = CatchAsync(async (req, res) => {
-  const { title, ownerName, place, services, officeAddress, phone, altPhone } =
-    req.body;
-  const updatedEvent = await Event.findByIdAndUpdate(
-    { _id: req.eventId },
-    {
-      $set: {
-        title,
-        ownerName,
-        place,
-        officeAddress,
-        services,
-        phone,
-        altPhone,
-      },
-    },
-    { new: true }
-  );
-
-  if (updatedEvent) {
-    return res
-      .status(200)
-      .json({ success: "event updated successfully", event: updatedEvent });
-  }
-
-  return res.json({ error: "event updation failed, try again" });
+  const event = await eventService.updateEventDetails(req.eventId, req.body);
+  res.status(200).json({ success: "event updated", event });
 });
 
 exports.updateEventProfile = CatchAsync(async (req, res) => {
-  const event = await Event.findById(req.eventId);
-  event.profile = req.body?.profile;
-  await event.save();
-  return res
-    .status(200)
-    .json({ success: "profile updated successfully", event });
-});
-
-exports.getPostComments = CatchAsync(async (req, res) => {
-  const id = req?.body?.postId;
-  if (id) {
-    const comments = await Comment.find({ postId: id })
-      .sort({
-        createdAt: "desc",
-      })
-      .populate("userId");
-    let replies = comments.map((c) => {
-      return c?.replies?.length >= 0 ? c?.replies.reverse() : [];
-    });
-
-    let NewComments = [...comments, replies];
-    console.log(comments);
-    return res.status(200).json({ success: "ok", comments });
-  } else {
-    res.json({ error: "POST id is not found" });
-  }
-});
-
-exports.EventReply = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  const comment_Id = req?.body?.commentId;
-  const id = req?.body?.postId;
-  const event = await Event.findById(req?.eventId);
-  console.log(event);
-  if (comment_Id) {
-    const reply = {
-      commentId: comment_Id,
-      username: event.title,
-      repliedUser: { profile: event?.profile, id: event?._id },
-      reply: req.body?.reply,
-    };
-    const repliedComment = await Comment.findByIdAndUpdate(
-      { _id: comment_Id },
-      { $push: { replies: reply } },
-      { new: true }
-    );
-    const comments = await Comment.find({ postId: id })
-      .sort({
-        createdAt: "desc",
-      })
-      .populate("userId");
-    let replies = comments.map((c) => {
-      return c?.replies?.length >= 0 ? c?.replies.reverse() : [];
-    });
-
-    let NewComments = [...comments, replies];
-    console.log(comments);
-
-    const sendNotification = new Notification({
-      recieverId: repliedComment?.userId,
-      senderId: event._id,
-      actionOn: {
-        model: "eventPosts",
-        objectId: id,
-      },
-      notificationMessage: `${event?.title} replied "${req.body?.reply}" to your comment "${repliedComment?.comment}"`,
-      date: new Date(),
-    });
-    await sendNotification.save();
-
-    return res.status(200).json({ success: "ok", comments });
-  } else {
-    res.json({ message: "comment id is not found" });
-  }
-});
-
-exports.deleteReply = CatchAsync(async (req, res) => {
-  const comment_Id = req?.body?.commentId;
-  const reply_Id = req?.body?.replyId;
-
-  if (comment_Id && reply_Id) {
-    const newComment = await Comment.findByIdAndUpdate(
-      { _id: comment_Id },
-      { $pull: { replies: { _id: reply_Id } } },
-      { new: true }
-    );
-
-    return res.status(200).json({ success: "ok" });
-  } else {
-    res.json({ message: "comment id is not found" });
-  }
-});
-
-exports.hasPlan = CatchAsync(async (req, res) => {
-  const event = await Event.findById(req.eventId);
-  const currentDate = new Date();
-  console.log("selected", event.selectedPlan);
-  if (event.selectedPlan.transactionId) {
-    if (event.selectedPlan.expiry < currentDate) {
-      await Event.updateOne(
-        { _id: req.eventId },
-        { $unset: { selectedPlan: 1 } }
-      );
-      return res.json({ error: "your plan has been expired" });
-    } else {
-      return res.status(200).json({ success: "ok" });
-    }
-  } else {
-    return res.json({ error: "please subscribe to a plan" });
-  }
-});
-
-exports.addPost = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  const event = await Event.findById(req.eventId);
-  let data = {};
-
-  if (req.body.image) {
-    data.image = req.body.image;
-  } else {
-    return res.json({ error: "post image is missing" });
-  }
-
-  if (req.body.location) data.location = req.body.location;
-  if (req.body.description) data.description = req.body.description;
-
-  data.postedBy = event._id;
-  console.log(data);
-  const post = new EventPost(data);
-  await post.save();
-  return res.status(200).json({ success: "posted Successfully", event });
-});
-
-exports.deletePost = CatchAsync(async (req, res) => {
-  await EventPost.findByIdAndDelete({ _id: req.body.id });
-  return res.status(200).json({ success: "post deleted" });
-});
-
-exports.addStory = CatchAsync(async (req, res) => {
-  const event = await Event.findById(req.eventId);
-  let data = {};
-
-  if (req.body.image) {
-    data.image = req.body.image;
-  } else {
-    return res.json({ error: "post image is missing" });
-  }
-
-  if (req.body.description) data.description = req.body.description;
-  const createdAt = new Date();
-
-  data.postedBy = event._id;
-  data.expiresOn = new Date(createdAt.getTime() + 1 * 24 * 60 * 60 * 1000); // 1 day valid
-  console.log(data);
-  const story = new Story(data);
-  await story.save();
-  return res.status(200).json({ success: "story Added Successfully", story });
+  const event = await eventService.updateEventProfileImage(req.eventId, req.file?.filename);
+  res.status(200).json({ success: "profile updated", event });
 });
 
 exports.getEventPosts = CatchAsync(async (req, res) => {
-  const posts = await EventPost.find({ postedBy: req?.body?.eventId }).sort({
-    createdAt: -1,
-  });
-  console.log("posts", posts);
-  if (posts) {
-    return res.status(200).json({ success: "ok", posts });
-  } else {
-    return res.status(200).json({ error: "failed to fetch posts" });
-  }
-});
-
-exports.getEventStory = CatchAsync(async (req, res) => {
-  console.log(req?.body?.eventId);
-  const event = await Event.findById(req?.body?.eventId);
-  console.log(event);
-  const currentDate = new Date();
-  const deleted = await Story.deleteMany({ expiresOn: { $lt: currentDate } });
-  console.log("deleted", deleted);
-  const stories = await Story.find({ postedBy: event._id });
-  console.log("stories", stories);
-  return res.status(200).json({ success: "ok", stories });
+  const posts = await eventService.getEventPosts(req.eventId);
+  res.status(200).json({ success: "ok", posts });
 });
 
 exports.getlikedUsers = CatchAsync(async (req, res) => {
-  const postId = req?.body?.postId;
-  const post = await EventPost.findById(postId).populate("likes");
-  const users = post?.likes;
-  return res.status(200).json({ success: "ok", users });
+  const users = await eventService.getLikedUsers(req.body.postId);
+  res.status(200).json({ success: "ok", users });
 });
 
-// notifications
+exports.addPost = CatchAsync(async (req, res) => {
+  const post = await eventService.addPost(req.eventId, req.body, req.file?.filename);
+  res.status(201).json({ success: "ok", post });
+});
+
+exports.hasPlan = CatchAsync(async (req, res) => {
+  const hasValidPlan = await eventService.hasPlan(req.eventId);
+  res.status(200).json({ success: true, hasPlan: hasValidPlan });
+});
+
+exports.deletePost = CatchAsync(async (req, res) => {
+  await eventService.deletePost(req.eventId, req.body.postId);
+  res.status(200).json({ success: "post deleted" });
+});
+
+exports.addStory = CatchAsync(async (req, res) => {
+  const story = await eventService.addStory(req.eventId, req.file?.filename);
+  res.status(201).json({ success: "story added", story });
+});
+
+exports.getEventStory = CatchAsync(async (req, res) => {
+  const stories = await eventService.getEventStory(req.eventId);
+  res.status(200).json({ success: "ok", stories });
+});
+
+exports.getPostComments = CatchAsync(async (req, res) => {
+  const comments = await eventService.getPostComments(req.body.postId);
+  res.status(200).json({ success: true, comments });
+});
+
+exports.EventReply = CatchAsync(async (req, res) => {
+  const { commentId, reply } = req.body;
+  const updatedComment = await eventService.addEventReply({
+    commentId,
+    reply,
+    eventId: req.eventId,
+  });
+  res.status(200).json({ success: true, newComment: updatedComment });
+});
+
+exports.deleteReply = CatchAsync(async (req, res) => {
+  const { commentId, replyId } = req.body;
+  const updatedComment = await eventService.deleteReply(commentId, replyId);
+  res.status(200).json({ success: true, newComment: updatedComment });
+});
+
+// ==================== NOTIFICATIONS ====================
 
 exports.getNotificationsCount = CatchAsync(async (req, res) => {
-  const count = await Notification.countDocuments({
-    recieverId: req?.eventId,
-    seen: false,
-  });
-  const MsgCount = await Chats.countDocuments({
-    eventId: req?.eventId,
-    isEventSeen: false,
-  });
-  return res.status(200).json({ success: true, count, MsgCount });
+  const { count } = await eventService.getNotificationsCount(req.eventId);
+  res.status(200).json({ success: true, count });
 });
 
 exports.getNotifications = CatchAsync(async (req, res) => {
-  await Notification.updateMany(
-    { recieverId: req?.eventId, seen: false },
-    { $set: { seen: true } }
-  );
-  const notifications = await Notification.find({
-    recieverId: req?.eventId,
-    seen: true,
-  }).sort({ date: -1 });
-
-  for (const notification of notifications) {
-    await notification.populate({
-      path: "actionOn.objectId",
-      model: notification.actionOn.model, // Use the dynamic model name
-    });
-  }
-  console.log(notifications[0].actionOn);
-  return res.status(200).json({ success: true, notifications });
+  const notifications = await eventService.getNotifications(req.eventId);
+  res.status(200).json({ success: true, notifications });
 });
 
 exports.clearNotification = CatchAsync(async (req, res) => {
-  const Id = req.body?.NotId;
-  await Notification.findByIdAndDelete(Id);
-  res.status(200).send({ success: true });
+  await eventService.clearNotification(req.body.NotId);
+  res.status(200).json({ success: true });
 });
 
 exports.clearAllNotifications = CatchAsync(async (req, res) => {
-  await Notification.deleteMany({ recieverId: req?.eventId, seen: true });
-  res.status(200).send({ success: "cleared All" });
+  await eventService.clearAllNotifications(req.eventId);
+  res.status(200).json({ success: "cleared All" });
 });
 
 exports.getFollowers = CatchAsync(async (req, res) => {
-  const event = await Event.findById(req?.eventId).populate("followers");
-  if (event) {
-    return res.status(200).json({ success: true, followers: event?.followers });
-  } else {
-    return res.json({ error: "failed to find followers,try again" });
-  }
+  const followers = await eventService.getFollowers(req.eventId);
+  res.status(200).json({ success: true, followers });
 });
 
+// ==================== JOBS ====================
+
 exports.addJobPost = CatchAsync(async (req, res) => {
-  console.log(req.body);
-  const {
-    title,
-    jobType,
-    location,
-    experience,
-    JobDescription,
-    salary,
-    skills,
-    vaccancies,
-  } = req.body;
-  const newJobPost = new jobPostModel({
-    eventId: req?.eventId,
-    title,
-    jobType,
-    location,
-    experience,
-    JobDescription,
-    salary,
-    skills,
-    vaccancies,
-  });
-  await newJobPost.save();
-  if (newJobPost) {
-    return res.status(200).json({ success: "job posted successfuly" });
-  } else {
-    return res.json({ error: "failed to add post job, try again" });
-  }
+  const post = await jobService.addJobPost(req.eventId, req.body);
+  res.status(201).json({ success: "job added", post });
 });
 
 exports.getJobPosts = CatchAsync(async (req, res) => {
-  const posts = await JobPost.find({ eventId: req?.eventId }).sort({
-    createdAt: -1,
-  });
-  return res.status(200).json({ success: true, posts });
+  const posts = await jobService.getJobPostsByEvent(req.eventId);
+  res.status(200).json({ success: true, posts });
 });
 
 exports.editJobPost = CatchAsync(async (req, res) => {
-  const {
-    id,
-    title,
-    jobType,
-    location,
-    experience,
-    JobDescription,
-    salary,
-    skills,
-    vaccancies,
-  } = req.body;
-  const updatedJobPost = await JobPost.findByIdAndUpdate(id, {
-    $set: {
-      title,
-      jobType,
-      location,
-      experience,
-      JobDescription,
-      salary,
-      skills,
-      vaccancies,
-    },
-  });
-  console.log(req.body);
-  if (updatedJobPost) {
-    return res.status(200).json({ success: true });
-  } else {
-    return res.json({ error: "failed to edit job post, try again" });
-  }
+  const updated = await jobService.editJobPost(req.body._id, req.body);
+  res.status(200).json({ success: "job updated", post: updated });
 });
 
 exports.deleteJobPost = CatchAsync(async (req, res) => {
-  const postId = req.body?.id;
-  await JobPost.findByIdAndDelete(postId);
-  return res.status(200).json({ success: "job post deleted successfully" });
+  await jobService.deleteJobPost(req.body.jobId);
+  res.status(200).json({ success: "job deleted" });
 });
 
 exports.blockJobPost = CatchAsync(async (req, res) => {
-  const postId = req.body?.id;
-  const post = await JobPost.findById(postId);
-  console.log(postId);
-  const updatedPost = await JobPost.findByIdAndUpdate(postId, {
-    $set: { isBlocked: !post?.isBlocked },
-  });
-  const success = updatedPost.isBlocked
-    ? "job post unblocked"
-    : "job post blocked";
-  return res.status(200).json({ success });
+  const job = await jobService.toggleBlockJobPost(req.body.jobId);
+  res.status(200).json({ success: job.isBlocked ? "job blocked" : "job unblocked", job });
 });
 
 exports.userAppliedjobs = CatchAsync(async (req, res) => {
-  const userId = req.body?.userId;
-  const jobs = await JobPost.find({
-    eventId: req?.eventId,
-    appliedUsers: { $in: userId },
-  }).sort({ createdAt: -1 });
-
-  return res.status(200).json({ success: true, jobs });
+  const users = await jobService.getAppliedUsers(req.body.jobId);
+  res.status(200).json({ success: true, users });
 });
 
 exports.acceptJobRequest = CatchAsync(async (req, res) => {
-  const post = await JobPost.findById(req?.body?.jobId);
-  post.acceptedUsers.push(req?.body?.userId);
-  post.appliedUsers.pull(req?.body?.userId);
-  await post.save();
-
-  // notification
-  const event = await Event.findById(req?.eventId);
-  const sendNotification = new Notification({
-    recieverId: req?.body?.userId,
-    senderId: req?.eventId,
-    actionOn: {
-      model: "jobPost",
-      objectId: post._id,
-    },
-    notificationMessage: `${event?.title} accepted your job request for '${post?.title}'`,
-    date: new Date(),
-  });
-  await sendNotification.save();
-
-  // give a message invitation to job
-  const chatConnection = await ChatConnection.findOne({
-    userId: req?.body?.userId,
-    eventId: req?.eventId,
-  }).populate("userId eventId");
-  if (chatConnection) {
-    const roomId = chatConnection._id;
-    const eventId = req?.eventId;
-    const senderId = req?.eventId;
-
-    const Data = {
-      roomId,
-      senderId,
-      userId: req?.body?.userId,
-      eventId,
-      isEventSeen: true,
-      message: `You are selected for the job -  ${post?.title}, if you are Interested lets move on to further procedures`,
-      time: new Date().toISOString(),
-    };
-
-    const newData = new Chats(Data);
-    await newData.save();
-  } else {
-    const connection = {
-      userId: req?.body?.userId,
-      eventId: req?.eventId,
-    };
-
-    const newChatConnection = new ChatConnection(connection);
-    const savedChatConnection = await newChatConnection.save();
-
-    const roomId = savedChatConnection._id;
-    const eventId = req?.eventId;
-    const senderId = req?.eventId;
-
-    const Data = {
-      roomId,
-      senderId,
-      userId: req?.body?.userId,
-      eventId,
-      isEventSeen: true,
-      message: `You are selected for the job -  ${post?.title}, if you are Interested lets move on to further procedures`,
-      time: new Date().toISOString(),
-    };
-
-    const newData = new Chats(Data);
-    await newData.save();
-  }
-
-  return res.status(200).json({ success: "accepted" });
+  const job = await jobService.acceptJobRequest(req.body.jobId, req.body.userId);
+  res.status(200).json({ success: "accepted request", job });
 });
 
 exports.getEventJobStats = CatchAsync(async (req, res) => {
-  const jobId = req?.body?.jobId;
-  const jobDetails = await JobPost.findOne({
-    _id: jobId,
-    eventId: req?.eventId,
-  }).populate("acceptedUsers appliedUsers");
-
-  const stats = [
-    {
-      label: "Applied Candidates",
-      data: jobDetails?.appliedUsers,
-    },
-    {
-      label: "selected Candidates",
-      data: jobDetails?.acceptedUsers,
-    },
-  ];
-
-  console.log(stats);
-  if (stats) {
-    return res.status(200).json({ success: "true", stats, jobDetails });
-  } else {
-    return res.json({ error: "failed to fetch job stats, try again" });
-  }
+  const stats = await jobService.getEventJobStats(req.eventId, req.body.jobId);
+  res.status(200).json({ success: true, stats });
 });
 
 exports.searchJob = CatchAsync(async (req, res) => {
-  const searched = req?.body?.searched;
-  const regexPattern = new RegExp(searched, "i");
-
-  console.log("Search Term:", searched);
-  console.log("Event ID:", req?.eventId);
-
-  const results = await JobPost.find({
-    $and: [
-      {
-        $or: [
-          { title: { $regex: regexPattern } },
-          { location: { $regex: regexPattern } },
-        ],
-      },
-      { eventId: req?.eventId },
-    ],
-  });
-
-  console.log("Search Results:", results);
-
-  if (results.length) {
-    res.status(200).json({
-      success: true,
-      results,
-    });
-  } else {
-    res.status(200).json({
-      error: "no results found",
-    });
-  }
+  const results = await jobService.searchEventJobs(req.eventId, req.body.searched || "");
+  res.status(200).json({ success: true, results });
 });

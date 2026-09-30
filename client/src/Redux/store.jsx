@@ -4,13 +4,14 @@ import AuthSlice from "./slices/AuthSlice";
 import EventAuthSlice from "./slices/EventAuthSlice";
 import AdminAuthSlice from "./slices/AdminAuthSlice";
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
     loadings: loadingSlice,
     Auth: AuthSlice,
     EventAuth: EventAuthSlice,
     AdminAuth: AdminAuthSlice,
   },
+  devTools: import.meta.env.DEV,
 });
 
 export default store;

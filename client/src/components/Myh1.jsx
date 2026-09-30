@@ -1,9 +1,12 @@
-import React from 'react'
+import React from "react";
+import Heading from "./ui/Heading";
 
-function Myh1({title,...props}) {
+function Myh1({ title, children, ...props }) {
   return (
-    <h1 {...props} className='myTextColor uppercase text-sm md:text-xl lg:text-2xl font-bold'>{title}</h1>
-  )
+    <Heading title={title} {...props}>
+      {children}
+    </Heading>
+  );
 }
 
-export default Myh1 
+export default Myh1;

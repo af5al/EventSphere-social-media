@@ -1,29 +1,43 @@
-require('dotenv').config()
-const jwt = require('jsonwebtoken')
-
-
+require("dotenv").config();
+const jwt = require("jsonwebtoken");
 
 module.exports = async (req, res, next) => {
- 
-    try {
-        const admintoken = req.headers['authorization']
-        console.log(admintoken, process.env.JWT_SECRET)
+  try {
+    let token = req.headers["authorization"] || req.headers["Authorization"];
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No admin authorization token provided",
+        error: "Auth failed",
+      });
+    }
 
-        jwt.verify(admintoken, process.env.JWT_SECRET, (err, decode) => {
-            if (err) {
-                console.log(err);
-                return res.status(401).send({
-                    message: "Auth failed",
-                    success: false
-                })
-            }else {
-                console.log(decode)
-                req.adminId = decode.id
-                next()
-            }
-        })
+    if (token.startsWith("Bearer ")) {
+      token = token.slice(7).trim();
     }
-    catch (error) {
-        return res.status(500).send({ message: "internal server error", success: false });
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
+      token = token.slice(1, -1);
     }
-}
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid or expired admin token",
+          error: "Auth failed",
+        });
+      }
+      req.adminId = decoded.id;
+      next();
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error during admin authentication",
+      error: error.message,
+    });
+  }
+};
